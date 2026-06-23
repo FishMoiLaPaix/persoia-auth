@@ -37,7 +37,7 @@ import urllib.parse
 import webbrowser
 from pathlib import Path
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "get_api_key",
@@ -129,10 +129,13 @@ def save_config(values: dict[str, str]) -> None:
     if platform.system() == "Windows":
         path.write_text(content, encoding="utf-8")
     else:
-        # Ouverture en 0600 d'emblée : pas de fenêtre world-readable.
+        # Ouverture en 0600 d'emblée (pas de fenêtre world-readable), PUIS chmod
+        # explicite : le mode de O_CREAT ne s'applique qu'à la création, donc un
+        # fichier préexistant aux permissions trop larges resterait inchangé.
         fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(content)
+        os.chmod(path, 0o600)
 
 
 def _read_file_config() -> dict[str, str]:
