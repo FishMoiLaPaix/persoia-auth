@@ -1,0 +1,18 @@
+# Secrets — ne jamais committer
+config.env
+.env
+*.credentials.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db

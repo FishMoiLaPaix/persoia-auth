@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "persoia-auth"
+version = "0.1.0"
+description = "Authentification persoIA partagée pour les outils : store de config commun + login navigateur. Zéro dépendance."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = ["persoia", "auth", "cli", "config"]
+authors = [{ name = "FishMoiLaPaix" }]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/FishMoiLaPaix/persoia-auth"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["persoia_auth.py"]
+
+[tool.hatch.build.targets.sdist]
+include = ["persoia_auth.py", "README.md", "LICENSE", "tests"]
