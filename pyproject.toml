@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "persoia-auth"
-version = "0.1.1"
+version = "0.1.2"
 description = "Authentification persoIA partagée pour les outils : store de config commun + login navigateur. Zéro dépendance."
 readme = "README.md"
 requires-python = ">=3.8"

@@ -60,6 +60,17 @@ def test_missing_key_non_interactive_raises(monkeypatch, tmp_path):
         pass
 
 
+def test_logout_removes_key_keeps_other_fields(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    persoia_auth.save_config(
+        {"PERSOIA_API_KEY": "persoia_sk_xyz", "PERSOIA_MODEL": "small"}
+    )
+    persoia_auth.logout()
+    cfg = persoia_auth.load_config()
+    assert cfg["PERSOIA_API_KEY"] == ""  # clé bien retirée
+    assert cfg["PERSOIA_MODEL"] == "small"  # autres champs conservés
+
+
 def test_config_path_unix_default(monkeypatch, tmp_path):
     monkeypatch.delenv("PERSOIA_CONFIG", raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
