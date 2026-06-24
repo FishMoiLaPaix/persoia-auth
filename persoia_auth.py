@@ -33,11 +33,13 @@ import platform
 import secrets
 import sys
 import threading
+import urllib.error
 import urllib.parse
+import urllib.request
 import webbrowser
 from pathlib import Path
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 __all__ = [
     "get_api_key",
@@ -45,6 +47,8 @@ __all__ = [
     "api_base",
     "login",
     "logout",
+    "reset",
+    "validate_api_key",
     "load_config",
     "save_config",
     "get_config_path",
@@ -188,7 +192,57 @@ def api_base(api_key: str | None = None) -> str:
     return resolve_api_base(key, config["PERSOIA_API_BASE"])
 
 
-def get_api_key(client: str | None = None, interactive: bool = True) -> str:
+def validate_api_key(
+    api_key: str | None = None, base: str | None = None, timeout: float = 6.0
+) -> bool:
+    """Vérifie qu'une clé est acceptée par l'API (``GET {base}/models``).
+
+    Renvoie ``False`` UNIQUEMENT si l'API rejette explicitement la clé (HTTP
+    401/403). Tout autre cas — succès (2xx), erreur serveur (5xx), API
+    injoignable (réseau/timeout) — renvoie ``True`` : on ne force pas un
+    re-login juste parce que l'API est momentanément indisponible.
+
+    Args:
+        api_key: clé à tester (défaut : celle du store).
+        base: URL de base à interroger (défaut : déduite de la clé/store).
+        timeout: délai réseau en secondes.
+    """
+    config = load_config()
+    key = (api_key if api_key is not None else config["PERSOIA_API_KEY"]).strip()
+    if not key:
+        return False
+    url = (base or resolve_api_base(key, config["PERSOIA_API_BASE"])).rstrip("/") + "/models"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return 200 <= resp.status < 300
+    except urllib.error.HTTPError as exc:
+        return exc.code not in (401, 403)
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return True  # API injoignable : on conserve la clé existante
+
+
+def reset() -> None:
+    """Réinitialise complètement le store : clé + base + modèle + tenant.
+
+    Contrairement à ``logout()`` (qui n'efface que la clé), ``reset()`` efface
+    AUSSI ``PERSOIA_API_BASE`` : indispensable pour changer d'environnement
+    (démo → prod). Sinon le portail de login reste déduit de l'ancienne base et
+    re-génère une clé du même environnement (« verrou démo »).
+    """
+    save_config(
+        {
+            "PERSOIA_API_KEY": "",
+            "PERSOIA_API_BASE": "",
+            "PERSOIA_MODEL": "",
+            "PERSOIA_TENANT_NAME": "",
+        }
+    )
+
+
+def get_api_key(
+    client: str | None = None, interactive: bool = True, validate: bool = False
+) -> str:
     """Renvoie la clé persoIA, en lançant le login navigateur si nécessaire.
 
     Ordre : variable d'environnement / store partagé. Si absente et ``interactive``
@@ -200,8 +254,14 @@ def get_api_key(client: str | None = None, interactive: bool = True) -> str:
             suivi de consommation (en-tête X-Persoia-Client) et est transmis au
             portail au login.
         interactive: autorise l'ouverture du navigateur si la clé manque.
+        validate: si vrai, vérifie que la clé du store est toujours acceptée par
+            l'API (``validate_api_key``). Une clé rejetée (401/403, ex. révoquée
+            ou base réinitialisée) est traitée comme absente → re-login. Évite de
+            réutiliser indéfiniment une clé morte.
     """
     key = load_config()["PERSOIA_API_KEY"].strip()
+    if key and validate and not validate_api_key(key):
+        key = ""  # clé présente mais rejetée par l'API → on la considère absente
     if key:
         return key
     if interactive and _can_open_browser():

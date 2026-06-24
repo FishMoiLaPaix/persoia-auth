@@ -20,10 +20,16 @@ base = persoia_auth.api_base()                              # https://chat.perso
 
 - `get_api_key()` : variable d'environnement → store partagé → (si absent et
   navigateur dispo) **login navigateur** → mémorise et renvoie la clé. Lève
-  `MissingKeyError` si aucune clé en mode non interactif.
+  `MissingKeyError` si aucune clé en mode non interactif. Option `validate=True` :
+  vérifie que la clé du store est toujours acceptée par l'API et **re-logue** si
+  elle a été révoquée (évite de réutiliser une clé morte).
 - `auth_headers()` : en-têtes HTTP prêts à l'emploi. `X-Persoia-Client` identifie
   l'outil pour le **suivi de consommation** côté persoIA (sans effet tant que le
   serveur ne l'exploite pas — sans danger).
+- `validate_api_key()` : `True`/`False` selon que l'API accepte la clé (faux
+  uniquement sur 401/403 ; une API injoignable renvoie `True`).
+- `reset()` : purge **clé + base + modèle + tenant** — à utiliser pour **changer
+  d'environnement** (démo → prod). `logout()` n'efface que la clé (garde la base).
 - `login()` / `logout()` / `load_config()` / `save_config()` / `get_config_path()`
   pour les besoins avancés.
 
