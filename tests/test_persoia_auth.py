@@ -77,3 +77,93 @@ def test_config_path_unix_default(monkeypatch, tmp_path):
     importlib.reload(persoia_auth)
     if os.name != "nt":
         assert persoia_auth.get_config_path() == tmp_path / "persoia" / "config.env"
+
+
+def test_reset_clears_key_and_api_base(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    persoia_auth.save_config(
+        {
+            "PERSOIA_API_KEY": "persoia_demo_sk_dead",
+            "PERSOIA_API_BASE": "https://demo.chat.persoia.com/v1",
+            "PERSOIA_MODEL": "small",
+        }
+    )
+    persoia_auth.reset()
+    cfg = persoia_auth.load_config()
+    assert cfg["PERSOIA_API_KEY"] == ""
+    assert cfg["PERSOIA_MODEL"] == ""
+    # base purgée → ne reste PAS bloquée sur la démo (contrairement à logout)
+    assert cfg["PERSOIA_API_BASE"] == persoia_auth.DEFAULT_API_BASE
+
+
+class _FakeHTTPError(persoia_auth.urllib.error.HTTPError):
+    def __init__(self, code):
+        super().__init__("http://x", code, "err", {}, None)
+
+
+def _patch_urlopen(monkeypatch, *, status=None, raises=None, seen=None):
+    def fake_urlopen(req, timeout=None):
+        if seen is not None:
+            seen.append(req.full_url)
+        if raises is not None:
+            raise raises
+
+        class _Resp:
+            def __enter__(self_):
+                return self_
+
+            def __exit__(self_, *a):
+                return False
+
+            status = 0
+
+        r = _Resp()
+        r.status = status
+        return r
+
+    monkeypatch.setattr(persoia_auth.urllib.request, "urlopen", fake_urlopen)
+
+
+def test_validate_api_key_false_only_on_401_403(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    # 401 / 403 → clé rejetée
+    _patch_urlopen(monkeypatch, raises=_FakeHTTPError(401))
+    assert persoia_auth.validate_api_key("persoia_sk_x") is False
+    _patch_urlopen(monkeypatch, raises=_FakeHTTPError(403))
+    assert persoia_auth.validate_api_key("persoia_sk_x") is False
+    # 200 → valide
+    _patch_urlopen(monkeypatch, status=200)
+    assert persoia_auth.validate_api_key("persoia_sk_x") is True
+    # 5xx → on ne ré-authentifie pas (clé conservée)
+    _patch_urlopen(monkeypatch, raises=_FakeHTTPError(503))
+    assert persoia_auth.validate_api_key("persoia_sk_x") is True
+    # réseau injoignable → clé conservée
+    _patch_urlopen(monkeypatch, raises=persoia_auth.urllib.error.URLError("down"))
+    assert persoia_auth.validate_api_key("persoia_sk_x") is True
+
+
+def test_validate_api_key_empty_is_false(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    assert persoia_auth.validate_api_key("") is False
+
+
+def test_get_api_key_env_var_is_not_validated(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    monkeypatch.setenv("PERSOIA_API_KEY", "persoia_sk_from_env")
+    called = []
+    monkeypatch.setattr(persoia_auth, "validate_api_key", lambda *a, **k: called.append(1) or False)
+    # validate=True ne doit PAS invalider/re-loguer une clé fournie en env var
+    assert persoia_auth.get_api_key(interactive=False, validate=True) == "persoia_sk_from_env"
+    assert called == [], "validate_api_key ne doit pas être appelé pour une clé d'env"
+
+
+def test_validate_api_key_never_sends_token_to_untrusted_base(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    seen = []
+    _patch_urlopen(monkeypatch, status=200, seen=seen)
+    # base malveillante : le token ne doit PAS y être envoyé → repli persoia.com
+    persoia_auth.validate_api_key("persoia_sk_x", base="https://evil.example.com")
+    assert seen, "urlopen aurait dû être appelé"
+    host = persoia_auth.urllib.parse.urlparse(seen[0]).hostname
+    assert host == "chat.persoia.com"  # repli sur la base prod déduite de la clé
+    assert "evil.example.com" not in seen[0]
