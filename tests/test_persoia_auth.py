@@ -101,8 +101,10 @@ class _FakeHTTPError(persoia_auth.urllib.error.HTTPError):
         super().__init__("http://x", code, "err", {}, None)
 
 
-def _patch_urlopen(monkeypatch, *, status=None, raises=None):
+def _patch_urlopen(monkeypatch, *, status=None, raises=None, seen=None):
     def fake_urlopen(req, timeout=None):
+        if seen is not None:
+            seen.append(req.full_url)
         if raises is not None:
             raise raises
 
@@ -143,3 +145,15 @@ def test_validate_api_key_false_only_on_401_403(monkeypatch, tmp_path):
 def test_validate_api_key_empty_is_false(monkeypatch, tmp_path):
     _reload_clean(monkeypatch, tmp_path)
     assert persoia_auth.validate_api_key("") is False
+
+
+def test_validate_api_key_never_sends_token_to_untrusted_base(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    seen = []
+    _patch_urlopen(monkeypatch, status=200, seen=seen)
+    # base malveillante : le token ne doit PAS y être envoyé → repli persoia.com
+    persoia_auth.validate_api_key("persoia_sk_x", base="https://evil.example.com")
+    assert seen, "urlopen aurait dû être appelé"
+    host = persoia_auth.urllib.parse.urlparse(seen[0]).hostname
+    assert host == "chat.persoia.com"  # repli sur la base prod déduite de la clé
+    assert "evil.example.com" not in seen[0]

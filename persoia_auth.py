@@ -198,9 +198,14 @@ def validate_api_key(
     """Vérifie qu'une clé est acceptée par l'API (``GET {base}/models``).
 
     Renvoie ``False`` UNIQUEMENT si l'API rejette explicitement la clé (HTTP
-    401/403). Tout autre cas — succès (2xx), erreur serveur (5xx), API
-    injoignable (réseau/timeout) — renvoie ``True`` : on ne force pas un
+    401/403). Tout autre cas — succès, erreur serveur, API injoignable
+    (réseau/timeout), base invalide — renvoie ``True`` : on ne force pas un
     re-login juste parce que l'API est momentanément indisponible.
+
+    Le token n'est envoyé qu'à un hôte **persoia.com de confiance** : la base
+    (explicite ou du store) est filtrée par ``_valid_api_base()`` ; sinon on
+    retombe sur la base déduite du préfixe de la clé (prod/démo). Cela évite
+    d'exfiltrer la clé vers un hôte arbitraire et tout ``ValueError`` d'URL.
 
     Args:
         api_key: clé à tester (défaut : celle du store).
@@ -211,11 +216,13 @@ def validate_api_key(
     key = (api_key if api_key is not None else config["PERSOIA_API_KEY"]).strip()
     if not key:
         return False
-    url = (base or resolve_api_base(key, config["PERSOIA_API_BASE"])).rstrip("/") + "/models"
+    candidate = base if base is not None else config["PERSOIA_API_BASE"]
+    safe_base = _valid_api_base(candidate) or resolve_api_base(key)
+    url = safe_base.rstrip("/") + "/models"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return 200 <= resp.status < 300
+        with urllib.request.urlopen(req, timeout=timeout):
+            return True
     except urllib.error.HTTPError as exc:
         return exc.code not in (401, 403)
     except (urllib.error.URLError, TimeoutError, OSError):
