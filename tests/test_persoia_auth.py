@@ -147,6 +147,16 @@ def test_validate_api_key_empty_is_false(monkeypatch, tmp_path):
     assert persoia_auth.validate_api_key("") is False
 
 
+def test_get_api_key_env_var_is_not_validated(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    monkeypatch.setenv("PERSOIA_API_KEY", "persoia_sk_from_env")
+    called = []
+    monkeypatch.setattr(persoia_auth, "validate_api_key", lambda *a, **k: called.append(1) or False)
+    # validate=True ne doit PAS invalider/re-loguer une clé fournie en env var
+    assert persoia_auth.get_api_key(interactive=False, validate=True) == "persoia_sk_from_env"
+    assert called == [], "validate_api_key ne doit pas être appelé pour une clé d'env"
+
+
 def test_validate_api_key_never_sends_token_to_untrusted_base(monkeypatch, tmp_path):
     _reload_clean(monkeypatch, tmp_path)
     seen = []

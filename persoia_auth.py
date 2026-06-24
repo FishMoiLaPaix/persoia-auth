@@ -266,14 +266,20 @@ def get_api_key(
             ou base réinitialisée) est traitée comme absente → re-login. Évite de
             réutiliser indéfiniment une clé morte.
     """
+    env_key = os.environ.get("PERSOIA_API_KEY", "").strip()
     key = load_config()["PERSOIA_API_KEY"].strip()
-    if key and validate and not validate_api_key(key):
-        key = ""  # clé présente mais rejetée par l'API → on la considère absente
+    # On ne (in)valide que les clés issues du store : une clé fournie en variable
+    # d'environnement est une intention explicite, respectée telle quelle (et un
+    # re-login n'aiderait pas — l'env masque le store au prochain load_config).
+    if key and validate and not env_key and not validate_api_key(key):
+        key = ""  # clé du store rejetée par l'API → considérée absente
     if key:
         return key
     if interactive and _can_open_browser():
-        if login(client=client):
-            return load_config()["PERSOIA_API_KEY"].strip()
+        token = login(client=client)
+        if token:
+            return token  # token frais renvoyé directement (pas via load_config,
+            #              qui serait masqué par une éventuelle env var)
     raise MissingKeyError(
         "Aucune clé persoIA. Connectez-vous (persoia_auth.login()) "
         "ou définissez la variable d'environnement PERSOIA_API_KEY."
