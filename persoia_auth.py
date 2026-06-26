@@ -248,7 +248,10 @@ def reset() -> None:
 
 
 def get_api_key(
-    client: str | None = None, interactive: bool = True, validate: bool = False
+    client: str | None = None,
+    interactive: bool = True,
+    validate: bool = False,
+    client_label: str | None = None,
 ) -> str:
     """Renvoie la clé persoIA, en lançant le login navigateur si nécessaire.
 
@@ -265,6 +268,10 @@ def get_api_key(
             l'API (``validate_api_key``). Une clé rejetée (401/403, ex. révoquée
             ou base réinitialisée) est traitée comme absente → re-login. Évite de
             réutiliser indéfiniment une clé morte.
+        client_label: nom lisible de l'outil (ex. "Scanner de cartes de visite").
+            Chaque add-on publie le sien ; il est affiché sur la page de
+            consentement du portail à la place du ``127.0.0.1:<port>`` loopback.
+            À défaut, le portail retombe sur le slug ``client``.
     """
     env_key = os.environ.get("PERSOIA_API_KEY", "").strip()
     key = load_config()["PERSOIA_API_KEY"].strip()
@@ -276,7 +283,7 @@ def get_api_key(
     if key:
         return key
     if interactive and _can_open_browser():
-        token = login(client=client)
+        token = login(client=client, client_label=client_label)
         if token:
             return token  # token frais renvoyé directement (pas via load_config,
             #              qui serait masqué par une éventuelle env var)
@@ -286,13 +293,22 @@ def get_api_key(
     )
 
 
-def auth_headers(client: str | None = None, interactive: bool = True) -> dict[str, str]:
+def auth_headers(
+    client: str | None = None,
+    interactive: bool = True,
+    client_label: str | None = None,
+) -> dict[str, str]:
     """En-têtes HTTP prêts à l'emploi : Authorization + X-Persoia-Client.
 
     L'en-tête ``X-Persoia-Client`` identifie l'outil pour le suivi de conso côté
     persoIA (sans effet tant que le serveur ne l'exploite pas — sans danger).
+
+    ``client_label`` (nom lisible) n'est utilisé qu'au login navigateur (page de
+    consentement) ; il n'est pas émis dans les en-têtes.
     """
-    headers = {"Authorization": f"Bearer {get_api_key(client, interactive)}"}
+    headers = {
+        "Authorization": f"Bearer {get_api_key(client, interactive, client_label=client_label)}"
+    }
     if client:
         headers[CLIENT_HEADER] = client
     return headers
@@ -309,10 +325,18 @@ def logout() -> None:
     save_config({"PERSOIA_API_KEY": ""})
 
 
-def login(client: str | None = None, timeout: int = 180) -> str | None:
-    """Login navigateur (flux loopback). Mémorise et renvoie la clé, ou None."""
+def login(
+    client: str | None = None, timeout: int = 180, client_label: str | None = None
+) -> str | None:
+    """Login navigateur (flux loopback). Mémorise et renvoie la clé, ou None.
+
+    ``client_label`` : nom lisible de l'outil affiché sur la page de consentement
+    (à défaut, le portail retombe sur le slug ``client``).
+    """
     config = load_config()
-    captured = _browser_login(config, client=client, timeout=timeout)
+    captured = _browser_login(
+        config, client=client, timeout=timeout, client_label=client_label
+    )
     if not captured or "token" not in captured:
         return None
     values = {"PERSOIA_API_KEY": captured["token"]}
@@ -354,7 +378,12 @@ def _can_open_browser() -> bool:
         return False
 
 
-def _browser_login(config: dict, client: str | None = None, timeout: int = 180) -> dict | None:
+def _browser_login(
+    config: dict,
+    client: str | None = None,
+    timeout: int = 180,
+    client_label: str | None = None,
+) -> dict | None:
     """Démarre un serveur loopback, ouvre le portail /cli, capture la clé.
 
     Le portail POST `{token, state, api_base?, model?, tenant_name?}` sur le
@@ -461,8 +490,10 @@ def _browser_login(config: dict, client: str | None = None, timeout: int = 180) 
     port = server.server_address[1]
     callback = f"http://127.0.0.1:{port}/callback"
     params = {"callback": callback, "state": state}
-    if client:  # hook forward-compat pour l'étiquetage par outil (option A)
+    if client:  # slug stable (suivi conso, en-tête X-Persoia-Client)
         params["client"] = client
+    if client_label:  # nom lisible publié par l'add-on, affiché au consentement
+        params["client_label"] = client_label
     authorize_url = f"{portal}/cli?" + urllib.parse.urlencode(params)
 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
