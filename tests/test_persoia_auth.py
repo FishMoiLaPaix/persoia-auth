@@ -167,3 +167,37 @@ def test_validate_api_key_never_sends_token_to_untrusted_base(monkeypatch, tmp_p
     host = persoia_auth.urllib.parse.urlparse(seen[0]).hostname
     assert host == "chat.persoia.com"  # repli sur la base prod déduite de la clé
     assert "evil.example.com" not in seen[0]
+
+
+def _capture_authorize_url(monkeypatch):
+    """Intercepte webbrowser.open et renvoie une liste qui recevra l'URL ouverte."""
+    opened: list[str] = []
+    monkeypatch.setattr(persoia_auth.webbrowser, "open", lambda url: opened.append(url))
+    return opened
+
+
+def test_browser_login_forwards_client_label(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    opened = _capture_authorize_url(monkeypatch)
+    # timeout=0 : aucun callback reçu → retourne None tout de suite après l'ouverture.
+    result = persoia_auth._browser_login(
+        {},
+        client="scan-cartes",
+        client_label="Scanner de cartes de visite",
+        timeout=0,
+    )
+    assert result is None
+    assert opened, "le navigateur aurait dû être ouvert"
+    query = persoia_auth.urllib.parse.urlparse(opened[0]).query
+    params = persoia_auth.urllib.parse.parse_qs(query)
+    assert params["client"] == ["scan-cartes"]  # slug stable pour le suivi conso
+    assert params["client_label"] == ["Scanner de cartes de visite"]  # nom publié
+
+
+def test_browser_login_omits_client_label_when_absent(monkeypatch, tmp_path):
+    _reload_clean(monkeypatch, tmp_path)
+    opened = _capture_authorize_url(monkeypatch)
+    persoia_auth._browser_login({}, client="scan-cartes", timeout=0)
+    query = persoia_auth.urllib.parse.urlparse(opened[0]).query
+    params = persoia_auth.urllib.parse.parse_qs(query)
+    assert "client_label" not in params  # le portail retombe sur le slug

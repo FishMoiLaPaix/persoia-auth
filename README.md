@@ -13,7 +13,10 @@ emplacement **commun à tous les outils**, et chacun la relit. Même store que
 ```python
 import persoia_auth
 
-key = persoia_auth.get_api_key(client="mon-outil")          # lit la clé, login navigateur si absente
+key = persoia_auth.get_api_key(
+    client="mon-outil",                       # slug stable → en-tête X-Persoia-Client (suivi conso)
+    client_label="Mon Super Outil",           # nom lisible affiché sur la page de consentement
+)
 headers = persoia_auth.auth_headers(client="mon-outil")     # {"Authorization": "Bearer …", "X-Persoia-Client": "mon-outil"}
 base = persoia_auth.api_base()                              # https://chat.persoia.com/v1 (ou démo)
 ```
@@ -23,6 +26,11 @@ base = persoia_auth.api_base()                              # https://chat.perso
   `MissingKeyError` si aucune clé en mode non interactif. Option `validate=True` :
   vérifie que la clé du store est toujours acceptée par l'API et **re-logue** si
   elle a été révoquée (évite de réutiliser une clé morte).
+- `client_label` : **nom lisible** que l'outil *publie* lui-même au login
+  (ex. `"Scanner de cartes de visite"`). Il s'affiche sur la page de consentement
+  `/cli` **à la place du** `127.0.0.1:<port>` loopback, pour que l'utilisateur
+  identifie l'outil qui demande l'accès. Vit dans le code de l'add-on → préservé
+  lors des mises à jour. À défaut, le portail retombe sur le slug `client`.
 - `auth_headers()` : en-têtes HTTP prêts à l'emploi. `X-Persoia-Client` identifie
   l'outil pour le **suivi de consommation** côté persoIA (sans effet tant que le
   serveur ne l'exploite pas — sans danger).
