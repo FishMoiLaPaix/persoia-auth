@@ -172,7 +172,15 @@ def test_validate_api_key_never_sends_token_to_untrusted_base(monkeypatch, tmp_p
 def _capture_authorize_url(monkeypatch):
     """Intercepte webbrowser.open et renvoie une liste qui recevra l'URL ouverte."""
     opened: list[str] = []
-    monkeypatch.setattr(persoia_auth.webbrowser, "open", lambda url: opened.append(url))
+
+    # Signature alignée sur webbrowser.open(url, new=0, autoraise=True) → bool :
+    # accepter *args/**kwargs évite de casser si l'appelant passe un jour ces
+    # options optionnelles.
+    def fake_open(url, *args, **kwargs):
+        opened.append(url)
+        return True
+
+    monkeypatch.setattr(persoia_auth.webbrowser, "open", fake_open)
     return opened
 
 
