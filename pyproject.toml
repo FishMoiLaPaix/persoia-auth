@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
 keywords = ["persoia", "auth", "cli", "config"]
-authors = [{ name = "FishMoiLaPaix" }]
+authors = [{ name = "MSPLR" }]
 dependencies = []
 
 [project.urls]
