@@ -75,8 +75,14 @@ Le flux et les endpoints sont ceux de [`persoia-cli`](https://github.com/FishMoi
 
 ## Bundles (PyInstaller)
 
-Pas de dépendance → vous pouvez soit `pip install persoia-auth`, soit **copier
-`persoia_auth.py`** directement dans votre projet/bundle.
+Pas de dépendance → vous pouvez soit l'installer depuis GitHub (le paquet n'est
+pas publié sur PyPI) :
+
+```bash
+pip install git+https://github.com/FishMoiLaPaix/persoia-auth.git
+```
+
+soit **copier `persoia_auth.py`** directement dans votre projet/bundle.
 
 ## Licence
 
